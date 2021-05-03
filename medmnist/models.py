@@ -115,7 +115,7 @@ class ResNet(nn.Module):
         x = self.layer3(x)
         x = self.layer4(x)
         
-        x = F.avg_pool2d(x, 7)
+        x = F.avg_pool2d(x, 3)
         x = x.view(x.size(0), -1)
         x = self.linear(x)
         return x

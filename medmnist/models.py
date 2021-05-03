@@ -61,7 +61,7 @@ class Bottleneck(nn.Module):
         if self.downsample is not None:
             residual = self.downsample(x)
         out += residual
-        out = slef.relu(out)
+        out = self.relu(out)
         return out
 
 

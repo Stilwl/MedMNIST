@@ -15,7 +15,7 @@ from medmnist.evaluator import getAUC, getACC, save_results
 from medmnist.info import INFO
 
 
-def main(flag, input_root, output_root, end_epoch, download):
+def main(flag, input_root, output_root, start_epoch, end_epoch, download, BS=128, LR=0.001):
     ''' main function
     :param flag: name of subset
 
@@ -40,13 +40,17 @@ def main(flag, input_root, output_root, end_epoch, download):
     n_channels = info['n_channels']
     n_classes = len(info['label'])
 
-    start_epoch = 0
-    lr = 0.001
-    batch_size = 128
-    val_auc_list = []
+    # start_epoch = 0
+    lr = LR
+    batch_size = BS
+    # val_auc_list = []
     dir_path = os.path.join(output_root, '%s_checkpoints' % (flag))
     if not os.path.exists(dir_path):
         os.makedirs(dir_path)
+
+    filename = os.path.join(dir_path, 'save_data.txt')
+    if not os.path.isfile(filename):
+        os.system(r"touch {}".format(filename))#调用系统命令行来创建文件
 
     print('==> Preparing data...')
     train_transform = transforms.Compose(
@@ -86,7 +90,8 @@ def main(flag, input_root, output_root, end_epoch, download):
     print('==> Building and training model...')
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    model = ResNet18(in_channels=n_channels, num_classes=n_classes).to(device)
+    # model = ResNet18(in_channels=n_channels, num_classes=n_classes).to(device)
+    model = ResNet50(in_channels=n_channels, num_classes=n_classes).to(device)
 
     if task == "multi-label, binary-class":
         criterion = nn.BCEWithLogitsLoss()
@@ -96,10 +101,17 @@ def main(flag, input_root, output_root, end_epoch, download):
     optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9)
 
     for epoch in trange(start_epoch, end_epoch):
+        if epoch>=1:
+            save_data = np.loadtxt(os.path.join(dir_path, 'save_data.txt'))
+            save_data = np.reshape(save_data,(-1,3))
+            val_auc_list = save_data[:, 1]
+            model_path = os.path.join(dir_path, 'ckpt_%d_auc_%.5f.pth' % (epoch-1, val_auc_list[epoch-1]))
+            model.load_state_dict(torch.load(model_path)['net'])
         train(model, optimizer, criterion, train_loader, device, task)
-        val(model, val_loader, device, val_auc_list, task, dir_path, epoch)
+        val(model, val_loader, device, task, dir_path, epoch)
 
-    auc_list = np.array(val_auc_list)
+    save_data = np.loadtxt(os.path.join(dir_path, 'save_data.txt'))
+    auc_list = save_data[:, 1]
     index = auc_list.argmax()
     print('epoch %s is the best model' % (index))
 
@@ -151,7 +163,7 @@ def train(model, optimizer, criterion, train_loader, device, task):
         optimizer.step()
 
 
-def val(model, val_loader, device, val_auc_list, task, dir_path, epoch):
+def val(model, val_loader, device, task, dir_path, epoch):
     ''' validation function
     :param model: the model to validate
     :param val_loader: DataLoader of validation set
@@ -186,7 +198,7 @@ def val(model, val_loader, device, val_auc_list, task, dir_path, epoch):
         y_true = y_true.cpu().numpy()
         y_score = y_score.detach().cpu().numpy()
         auc = getAUC(y_true, y_score, task)
-        val_auc_list.append(auc)
+        acc = getACC(y_true, y_score, task)
 
     state = {
         'net': model.state_dict(),
@@ -196,6 +208,10 @@ def val(model, val_loader, device, val_auc_list, task, dir_path, epoch):
 
     path = os.path.join(dir_path, 'ckpt_%d_auc_%.5f.pth' % (epoch, auc))
     torch.save(state, path)
+
+    data_file = open(os.path.join(dir_path, 'save_data.txt'), 'a')
+    data_file.write(str(epoch) + ' ' + str(auc) + ' ' + str(acc) + "\n")
+    data_file.close()
 
 
 def test(model, split, data_loader, device, flag, task, output_root=None):
@@ -259,23 +275,46 @@ if __name__ == '__main__':
                         default='./output',
                         help='output root, where to save models and results',
                         type=str)
-    parser.add_argument('--num_epoch',
+    # parser.add_argument('--num_epoch',
+    #                     default=100,
+    #                     help='num of epochs of training',
+    #                     type=int)
+    parser.add_argument('--start_epoch',
+                        default=0,
+                        help='num of epochs of starting train',
+                        type=int)
+    parser.add_argument('--end_epoch',
                         default=100,
-                        help='num of epochs of training',
+                        help='num of epochs of ending train',
                         type=int)
     parser.add_argument('--download',
                         default=True,
                         help='whether download the dataset or not',
                         type=bool)
+    parser.add_argument('--lr',
+                        type=float, 
+                        default=0.001,
+                        help='learning rate')
+    parser.add_argument('--bs',
+                        type=int, 
+                        default=128,
+                        help='batch size')
 
     args = parser.parse_args()
     data_name = args.data_name.lower()
     input_root = args.input_root
     output_root = args.output_root
-    end_epoch = args.num_epoch
+    # end_epoch = args.num_epoch
+    start_epoch = args.start_epoch
+    end_epoch = args.end_epoch
     download = args.download
+    batch_size = args.bs
+    learning_rate = args.lr
     main(data_name,
          input_root,
          output_root,
+         start_epoch=start_epoch,
          end_epoch=end_epoch,
-         download=download)
+         download=download,
+         BS=batch_size,
+         LR=learning_rate)

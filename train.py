@@ -15,7 +15,7 @@ from medmnist.evaluator import getAUC, getACC, save_results
 from medmnist.info import INFO
 
 
-def main(flag, input_root, output_root, start_epoch, end_epoch, download, BS=128, LR=0.001):
+def main(flag, netname, input_root, output_root, start_epoch, end_epoch, download, BS=128, LR=0.001):
     ''' main function
     :param flag: name of subset
 
@@ -90,8 +90,10 @@ def main(flag, input_root, output_root, start_epoch, end_epoch, download, BS=128
     print('==> Building and training model...')
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    model = ResNet18(in_channels=n_channels, num_classes=n_classes).to(device)
-    #model = ResNet50(in_channels=n_channels, num_classes=n_classes).to(device)
+    if netname == 'resnet50':
+        model = ResNet50(in_channels=n_channels, num_classes=n_classes).to(device)
+    else:
+        model = ResNet18(in_channels=n_channels, num_classes=n_classes).to(device)
 
     if task == "multi-label, binary-class":
         criterion = nn.BCEWithLogitsLoss()
@@ -264,7 +266,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='RUN Baseline model of MedMNIST')
     parser.add_argument('--data_name',
-                        default='pathmnist',
+                        default='breastmnist',
                         help='subset of MedMNIST',
                         type=str)
     parser.add_argument('--input_root',
@@ -299,6 +301,10 @@ if __name__ == '__main__':
                         type=int, 
                         default=128,
                         help='batch size')
+    parser.add_argument('--netname',
+                        type=str, 
+                        default='ResNet18',
+                        help='kind of resnet')
 
     args = parser.parse_args()
     data_name = args.data_name.lower()
@@ -310,11 +316,14 @@ if __name__ == '__main__':
     download = args.download
     batch_size = args.bs
     learning_rate = args.lr
+    netname = args.netname.lower()
     main(data_name,
+         netname,
          input_root,
          output_root,
          start_epoch=start_epoch,
          end_epoch=end_epoch,
          download=download,
          BS=batch_size,
-         LR=learning_rate)
+         LR=learning_rate,
+         )
